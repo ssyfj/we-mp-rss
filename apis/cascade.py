@@ -746,7 +746,8 @@ async def upload_articles(
                     status=article_data.get("status", 1),
                     publish_time=article_data.get("publish_time"),
                     created_at=datetime.utcnow(),
-                    updated_at=datetime.utcnow()
+                    updated_at=int(datetime.utcnow().timestamp()),
+                    updated_at_millis=int(datetime.utcnow().timestamp() * 1000)
                 )
                 session.add(article)
                 new_count += 1
@@ -754,7 +755,8 @@ async def upload_articles(
                 # 更新现有文章
                 existing.title = article_data.get("title", existing.title)
                 existing.content = article_data.get("content", existing.content)
-                existing.updated_at = datetime.utcnow()
+                existing.updated_at = int(datetime.utcnow().timestamp())
+                existing.updated_at_millis = int(datetime.utcnow().timestamp() * 1000)
         
         # 更新分配记录的文章统计
         allocation.article_count = len(req.articles)
