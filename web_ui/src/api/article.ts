@@ -41,6 +41,7 @@ export interface ArticleListParams {
   search?: string
   status?: number
   mp_id?: string
+  has_content?: boolean
   only_favorite?: boolean
 }
 
@@ -67,6 +68,7 @@ export const getArticles = (params: ArticleListParams) => {
     search: params.search,
     status: params.status,
     mp_id: params.mp_id,
+    has_content: params.has_content,
     only_favorite: params.only_favorite
   }
   return http.get<ArticleListResult>('/wx/articles', {
@@ -80,16 +82,16 @@ export const getArticles = (params: ArticleListParams) => {
  * @parama 类型 0当前,-1上一篇,1下一篇
  * @returns 文章详情结果
  */
-export const getArticleDetail = (id: number | string, action_type: number = 0) => {
+export const getArticleDetail = (id: number, action_type: number = 0) => {
+  const detailParams = { params: { content: true } }
   switch(action_type){
     case -1:
-      return http.get<{code: number, data: Article}>(`/wx/articles/${id}/prev`)
+      return http.get<{code: number, data: Article}>(`/wx/articles/${id}/prev`, detailParams)
     case 1:
-      return http.get<{code: number, data: Article}>(`/wx/articles/${id}/next`)
+      return http.get<{code: number, data: Article}>(`/wx/articles/${id}/next`, detailParams)
     default:
       // 默认获取当前文章详情
-      return http.get<{code: number, data: Article}>(`/wx/articles/${id}`)
-      break
+      return http.get<{code: number, data: Article}>(`/wx/articles/${id}`, detailParams)
   }
 }
 
@@ -98,8 +100,10 @@ export const getArticleDetail = (id: number | string, action_type: number = 0) =
  * @param id 当前文章ID
  * @returns 上一篇文章详情结果
  */
-export const getPrevArticleDetail = (id: number | string) => {
-  return http.get<{code: number, data: Article}>(`/wx/articles/${id}/prev`)
+export const getPrevArticleDetail = (id: number) => {
+  return http.get<{code: number, data: Article}>(`/wx/articles/${id}/prev`, {
+    params: { content: true }
+  })
 }
 
 /**
@@ -107,8 +111,10 @@ export const getPrevArticleDetail = (id: number | string) => {
  * @param id 当前文章ID
  * @returns 下一篇文章详情结果
  */
-export const getNextArticleDetail = (id: number | string) => {
-  return http.get<{code: number, data: Article}>(`/wx/articles/${id}/next`)
+export const getNextArticleDetail = (id: number) => {
+  return http.get<{code: number, data: Article}>(`/wx/articles/${id}/next`, {
+    params: { content: true }
+  })
 }
 
 /**

@@ -14,6 +14,7 @@ from apis.base import format_search_kw
 from core.print import print_warning, print_info, print_error, print_success
 from core.cache import clear_cache_pattern
 from tools.fix import fix_article
+from core.article_content import sync_article_content
 from driver.wxarticle import WXArticleFetcher
 router = APIRouter(prefix=f"/articles", tags=["文章管理"])
 
@@ -252,7 +253,7 @@ async def toggle_article_favorite_status(
                 message=f"更新文章收藏状态失败: {str(e)}"
             )
         )
-    
+
 @router.delete("/clean_duplicate_articles", summary="清理重复文章")
 async def clean_duplicate(
     current_user: dict = Depends(get_current_user_or_ak)
@@ -419,9 +420,9 @@ async def get_refresh_task_status(
 
 
 @router.get("/{article_id}", summary="获取文章详情")
-async def get_article_detail(
+def get_article_detail(
     article_id: str,
-    content: bool = False,
+    content: bool = Query(False),
     # current_user: dict = Depends(get_current_user)
 ):
     session = DB.get_session()
@@ -435,6 +436,17 @@ async def get_article_detail(
                     message="文章不存在"
                 )
             )
+        if content:
+            updated, _ = sync_article_content(
+                session=session,
+                article=article,
+                preferred_mode=cfg.get("gather.content_mode", "web"),
+            )
+            if updated:
+                clear_cache_pattern("articles_list")
+                clear_cache_pattern("article_detail")
+                clear_cache_pattern("home_page")
+                clear_cache_pattern("tag_detail")
         return success_response(fix_article(article))
     except HTTPException as e:
         raise e
@@ -484,8 +496,9 @@ async def delete_article(
         )
 
 @router.get("/{article_id}/next", summary="获取下一篇文章")
-async def get_next_article(
+def get_next_article(
     article_id: str,
+    content: bool = Query(False),
     current_user: dict = Depends(get_current_user_or_ak)
 ):
     session = DB.get_session()
@@ -517,6 +530,17 @@ async def get_next_article(
                     message="没有下一篇文章"
                 )
             )
+        if content:
+            updated, _ = sync_article_content(
+                session=session,
+                article=next_article,
+                preferred_mode=cfg.get("gather.content_mode", "web"),
+            )
+            if updated:
+                clear_cache_pattern("articles_list")
+                clear_cache_pattern("article_detail")
+                clear_cache_pattern("home_page")
+                clear_cache_pattern("tag_detail")
         return success_response(fix_article(next_article))
     except HTTPException as e:
         raise e
@@ -530,8 +554,9 @@ async def get_next_article(
         )
 
 @router.get("/{article_id}/prev", summary="获取上一篇文章")
-async def get_prev_article(
+def get_prev_article(
     article_id: str,
+    content: bool = Query(False),
     current_user: dict = Depends(get_current_user_or_ak)
 ):
     session = DB.get_session()
@@ -563,6 +588,17 @@ async def get_prev_article(
                     message="没有上一篇文章"
                 )
             )
+        if content:
+            updated, _ = sync_article_content(
+                session=session,
+                article=prev_article,
+                preferred_mode=cfg.get("gather.content_mode", "web"),
+            )
+            if updated:
+                clear_cache_pattern("articles_list")
+                clear_cache_pattern("article_detail")
+                clear_cache_pattern("home_page")
+                clear_cache_pattern("tag_detail")
         return success_response(fix_article(prev_article))
     except HTTPException as e:
         raise e
