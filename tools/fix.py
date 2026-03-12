@@ -1,6 +1,8 @@
 import copy
 from core.models.article import Article
 def fix_html(content:str):
+    if not content:
+        return ""
     from core.content_format import format_content
     from tools.mdtools.md2html import convert_markdown_to_html
     from tools.htmltools import htmltools
@@ -10,5 +12,5 @@ def fix_html(content:str):
     return content
 def fix_article(article):
     art=article.to_dict()
-    art['content']=fix_html(art['content'])
+    art['content']=fix_html(art.get('content') or "")
     return art

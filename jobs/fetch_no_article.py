@@ -1,12 +1,9 @@
 from core.models.article import Article,DATA_STATUS
 import core.db as db
-from tools.fix import fix_html
+from core.config import cfg
 from core.wait import Wait
-from core.wx.base import WxGather
-from time import sleep
-from core.print import print_success,print_error
-import random
-from driver.wxarticle import Web
+from core.print import print_success,print_error,print_warning
+from core.article_content import build_article_url, sync_article_content
 DB=db.Db(tag="内容修正")
 def fetch_articles_without_content():
     """
@@ -14,7 +11,6 @@ def fetch_articles_without_content():
     使用 FETCHING 状态锁定，防止多节点同时获取相同数据
     """
     session = DB.get_session()
-    ga=WxGather().Model()
     try:
         # 查询content为空且未被锁定的文章
         from sqlalchemy import or_
@@ -37,35 +33,25 @@ def fetch_articles_without_content():
         
         for article in articles:
             try:
-                # 构建URL
-                if article.url:
-                    url = article.url
-                else:
-                    url = f"https://mp.weixin.qq.com/s/{article.id}"
-                
+                url = build_article_url(article)
                 print(f"正在处理文章: {article.title}, URL: {url}")
                 
                 # 获取内容
-                if cfg.get("gather.content_mode","web"):
-                    content=Web.get_article_content(url).get("content")
-                else:
-                    content = ga.content_extract(url)
-                if content:
-                    # 更新内容
-                    article.content = content
-                    article.content_html =fix_html(content)
-                    if  content=="DELETED":
+                updated, fetch_mode = sync_article_content(
+                    session=session,
+                    article=article,
+                    preferred_mode=cfg.get("gather.content_mode", "web"),
+                )
+                if updated:
+                    if article.status == DATA_STATUS.DELETED:
                         print_error(f"获取文章 {article.title} 内容已被发布者删除")
-                        article.status = DATA_STATUS.DELETED
                     else:
-                        article.status = DATA_STATUS.ACTIVE  # 恢复正常状态
-                    session.commit()
-                    print_success(f"成功更新文章 {article.title} 的内容")
+                        print_success(f"成功更新文章 {article.title} 的内容, mode={fetch_mode}")
                 else:
                     # 获取失败，恢复状态以便后续重试
                     article.status = DATA_STATUS.ACTIVE
                     session.commit()
-                    print_error(f"获取文章 {article.title} 内容失败")
+                    print_error(f"获取文章 {article.title} 内容失败, mode={fetch_mode}")
                 Wait(min=5,max=10,tips=f"修正 {article.title}... 完成")
             except Exception as e:
                 # 单篇文章处理失败，恢复状态
@@ -79,8 +65,6 @@ from core.queue import TaskQueueManager
 scheduler=TaskScheduler()
 task_queue=TaskQueueManager()
 task_queue.run_task_background()
-from core.config import cfg
-from core.print import print_success,print_warning
 def start_sync_content():
     """
     根据配置自动启动文章内容同步任务
