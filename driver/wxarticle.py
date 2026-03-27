@@ -509,21 +509,38 @@ class WXArticleFetcher:
                                  'meta_content',
                                  "js_article_bottom_bar",
                                  "js_pc_weapp_code",
+                                 "js_top_ad_area",
                                  "js_novel_card",
                                  "js_pc_qr_code"
                                  ],
-                                 remove_selectors=[
+                                   remove_selectors=[
                                      "link",
                                      "head",
                                      "script"
                                  ],
-                                 remove_attributes=[
-                                     {"name":"style","value":"display: none;"},
-                                     {"name":"style","value":"display:none;"},
-                                     {"name":"aria-hidden","value":"true"},
-                                 ],
-                                 remove_normal_tag=True
                                  )
+        # return htmltools.clean_html(str(html_content).strip(),
+        #                         remove_ids=
+        #                         ['content_bottom_interaction',
+        #                          'activity-name',
+        #                          'meta_content',
+        #                          "js_article_bottom_bar",
+        #                          "js_pc_weapp_code",
+        #                          "js_novel_card",
+        #                          "js_pc_qr_code"
+        #                          ],
+        #                          remove_selectors=[
+        #                              "link",
+        #                              "head",
+        #                              "script"
+        #                          ],
+        #                          remove_attributes=[
+        #                              {"name":"style","value":"display: none;"},
+        #                              {"name":"style","value":"display:none;"},
+        #                              {"name":"aria-hidden","value":"true"},
+        #                          ],
+        #                          remove_normal_tag=True
+        #                          )
    
 
 

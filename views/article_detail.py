@@ -19,7 +19,7 @@ from sqlalchemy.orm import defer
 # 创建路由器
 router = APIRouter(tags=["文章详情"])
 @router.get("/article/{article_id}", response_class=HTMLResponse, summary="文章详情页")
-@cache_view("article_detail", ttl=3600)  # 缓存1小时
+@cache_view("article_detail", ttl=3)  # 缓存1小时
 async def article_detail_view(
     request: Request,
     article_id: str
