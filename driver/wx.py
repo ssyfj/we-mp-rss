@@ -325,8 +325,10 @@ class Wx:
                 
             self.set_lock()
             
-            with self._login_lock:
-                self._haslogin = False
+            # 使用更短的锁持有时间，只保护变量修改
+            self._login_lock.acquire()
+            self._haslogin = False
+            self._login_lock.release()
                 
             # 清理现有资源
             self.cleanup_resources()
