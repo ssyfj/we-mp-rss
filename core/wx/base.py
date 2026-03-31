@@ -187,6 +187,19 @@ class WxGather:
                 setStatus(True)
                 from core.models import Article
                 from datetime import datetime
+                # 文章基础属性
+                # title：文章标题（例如文档中的"测试无图"、"测试"）
+                # aid：文章全局唯一ID（App Message ID）
+                # link：文章的永久链接（URL），用户点击阅读的地址
+                # digest：文章摘要（如果为空则显示为空字符串）
+                # cover / cover_img：封面图片的URL地址
+                # update_time / create_time：文章的更新时间和创建时间（Unix时间戳格式，需转换）
+                # is_deleted：删除状态标记（false 表示未删除）
+                # 状态与类型标识
+                # copyright_stat：原创状态（0通常表示非原创，1表示原创）
+                # is_pay_subscribe：是否为付费订阅内容
+                # item_show_type：展示类型（0通常为普通图文，10可能为特定的无图或特殊样式）
+                # has_red_packet_cover：封面是否有红包挂件（0为无）
                 art={
                     "id":str(data['id']),
                     "mp_id":data['mp_id'],
@@ -198,8 +211,15 @@ class WxGather:
                     "publish_src":data.get("publish_src",0),
                     "publish_src":data.get("publish_src",0),
                     "publish_status":data.get("publish_status","200"),
-                    "create_time":data.get("create_time",""),
                     "publish_time":data.get("update_time",""),
+                    "create_time":data.get("create_time",""),
+                    "original_check_type":data.get("original_check_type",""),
+                    "in_profile":data.get("in_profile",""),
+                    "pre_publish_status":data.get("pre_publish_status",""),
+                    "service_type":data.get("service_type",""),
+                    "item_show_types":data.get("item_show_types",""),
+                    "copyright_stat":data.get("copyright_stat",""),
+                    "has_red_packet_cover":data.get("has_red_packet_cover",""),
                     "status": DATA_STATUS.DELETED if data.get("is_deleted",False) else DATA_STATUS.ACTIVE,
                 }
                 if 'digest' in data:
