@@ -118,68 +118,6 @@ class Db:
         try:
             session=self.get_session()
             from datetime import datetime
-
-            def _to_unix_seconds(value) -> int:
-                now_ts = int(datetime.now().timestamp())
-                if value is None:
-                    return now_ts
-                if isinstance(value, datetime):
-                    return int(value.timestamp())
-                if isinstance(value, (int, float)):
-                    iv = int(value)
-                    return int(iv / 1000) if iv > 1_000_000_000_000 else iv
-                if isinstance(value, str):
-                    raw = value.strip()
-                    if not raw:
-                        return now_ts
-                    if raw.isdigit():
-                        return _to_unix_seconds(int(raw))
-                    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
-                        try:
-                            return int(datetime.strptime(raw, fmt).timestamp())
-                        except ValueError:
-                            continue
-                    try:
-                        return int(datetime.fromisoformat(raw.replace("Z", "+00:00")).timestamp())
-                    except ValueError:
-                        return now_ts
-                return now_ts
-            def _to_unix_millis(value, fallback_seconds) -> int:
-                now_ts = datetime.now().timestamp()  # 保留小数精度
-                # 确保 fallback_seconds 是有效的秒级时间戳
-                if fallback_seconds is None:
-                    fallback_seconds = now_ts
-                if isinstance(fallback_seconds, (int, float)):
-                    if fallback_seconds > 1_000_000_000_000:
-                        fallback_seconds = fallback_seconds / 1000
-                    # 不转换为int，保留小数部分
-                else:
-                    fallback_seconds = now_ts
-
-                if value is None:
-                    return fallback_seconds * 1000
-                if isinstance(value, datetime):
-                    return int(value.timestamp() * 1000)
-                if isinstance(value, (int, float)):
-                    iv = int(value)
-                    return iv if iv > 1_000_000_000_000 else iv * 1000
-                if isinstance(value, str):
-                    raw = value.strip()
-                    if not raw:
-                        return fallback_seconds * 1000
-                    if raw.isdigit():
-                        return _to_unix_millis(int(raw), fallback_seconds)
-                    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
-                        try:
-                            return int(datetime.strptime(raw, fmt).timestamp() * 1000)
-                        except ValueError:
-                            continue
-                    try:
-                        return int(datetime.fromisoformat(raw.replace("Z", "+00:00")).timestamp() * 1000)
-                    except ValueError:
-                        return fallback_seconds * 1000
-                return fallback_seconds * 1000
-
             art = Article(**article_data)
             if art.id:
                art.id=f"{str(art.mp_id)}-{art.id}".replace("MP_WXS_","")
@@ -216,6 +154,7 @@ class Db:
                 art.created_at=datetime.strptime(art.created_at ,'%Y-%m-%d %H:%M:%S')
             # 先处理毫秒，用原始值作为fallback，再转换秒
             original_updated_at = art.updated_at
+            from core.timestamp import _to_unix_millis, _to_unix_seconds
             art.updated_at_millis = _to_unix_millis(art.updated_at_millis, original_updated_at)
             art.updated_at = _to_unix_seconds(art.updated_at)
             art.content=art.content
@@ -227,32 +166,15 @@ class Db:
             from core.models.base import DATA_STATUS
             art.status=DATA_STATUS.ACTIVE
             session.add(art)
-            # self._session.merge(art)
+            existing_ts = existing_article.publish_time
+            new_ts = art.publish_time
+            if new_ts and existing_ts and new_ts > existing_ts:
+                session.merge(art)
+                print_info(f"Updated article (UNIQUE): {art.id} (newer publish_time)")
             sta=session.commit()
-            
         except Exception as e:
+            session.rollback()  # 回滚事务，确保session状态正常
             if "UNIQUE" in str(e) or "Duplicate entry" in str(e):
-                # 检查时间戳是否更新
-                existing_article = session.query(Article).filter(
-                    (Article.url == art.url) | (Article.id == art.id)
-                ).first()
-                if existing_article is not None:
-                    existing_ts = existing_article.publish_time
-                    new_ts = art.publish_time
-                    if new_ts and existing_ts and new_ts > existing_ts:
-                        # 更新文章内容
-                        existing_article.publish_time = art.publish_time
-                        if art.content and not existing_article.content:
-                            existing_article.content = art.content
-                        if art.content_html and not existing_article.content_html:
-                            existing_article.content_html = art.content_html
-                        if art.title and not existing_article.title:
-                            existing_article.title = art.title
-                        if art.updated_at:
-                            existing_article.updated_at = art.updated_at
-                        session.commit()
-                        print_info(f"Updated article (UNIQUE): {art.id} (newer publish_time)")
-                        return True
                 print_warning(f"Article already exists: {art.id}")
             else:
                 print_error(f"Failed to add article: {e}")
