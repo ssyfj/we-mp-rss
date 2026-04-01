@@ -66,10 +66,8 @@ def fetch_articles_without_content():
     except Exception as e:
         print(f"处理过程中发生错误: {e}")
 from core.task import TaskScheduler
-from core.queue import TaskQueueManager
+from core.queue import TaskQueue
 scheduler=TaskScheduler()
-task_queue=TaskQueueManager()
-task_queue.run_task_background()
 def start_sync_content():
     """
     根据配置自动启动文章内容同步任务
@@ -96,10 +94,10 @@ def start_sync_content():
         return
     interval=int(cfg.get("gather.content_auto_interval",10)) # 每隔多少分钟
     cron_exp=f"*/{interval} * * * *"
-    task_queue.clear_queue()
+    TaskQueue.clear_queue()
     scheduler.clear_all_jobs()
     def do_sync():
-        task_queue.add_task(fetch_articles_without_content)
+        TaskQueue.add_task(fetch_articles_without_content)
     job_id=scheduler.add_cron_job(do_sync,cron_expr=cron_exp)
     print_success(f"已添自动同步文章内容任务: {job_id}")
     scheduler.start()

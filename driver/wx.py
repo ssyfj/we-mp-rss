@@ -89,6 +89,14 @@ class Wx:
         """
         print("开始切换账号...")
         try:
+            # 检查是否已有切换操作在进行
+            if getLockStatus():
+                print_warning("已有切换账号操作在进行中，请稍后")
+                return False
+            
+            # 设置锁状态
+            setLockStatus(True)
+            
             self.Token(isClose=False)
             if self._haslogin is False:
                 self.Close()
@@ -104,7 +112,10 @@ class Wx:
             
             # 等待页面加载完成
             page.wait_for_load_state("networkidle")
-            self._haslogin=False
+            
+            # 使用局部变量而不是修改实例变量，避免影响并发任务
+            # self._haslogin=False  # 移除这行，避免影响其他任务
+            
             # 点击账号信息区域打开账号面板
             account_info = page.locator(".weui-desktop-account__info")
             if account_info.count() > 0:
@@ -166,19 +177,26 @@ class Wx:
                                 return True
                             else:
                                 print_warning("没有找到可切换的账号")
+                                return False
                         except Exception as e:
                             print_error(f"切换账号时发生错误: {str(e)}")
                             return False
                     else:
                         print_warning("未找到切换账号按钮")
+                        return False
                 else:
                     print_warning("账号面板未打开")
+                    return False
             else:
                 print_warning("未找到账号信息区域")
+                return False
                 
         except Exception as e:
             print_error(f"切换账号时发生错误: {str(e)}")
-            return False 
+            return False
+        finally:
+            # 确保锁被释放
+            setLockStatus(False) 
     def GetCode(self,CallBack=None,Notice=None):
         self.Notice=Notice
         if  self.check_lock():
@@ -241,12 +259,15 @@ class Wx:
             if not getStatus():
                 print_warning("登录状态检查失败")
                 return None
+            
+            # 检查是否已有锁，记录是否由本方法获取
+            lock_acquired_here = False
             if getLockStatus():
-                print_warning("正在切换帐号,请稍后")
-                return None
+                print_info("锁已被其他操作持有，继续执行")
+            else:
+                setLockStatus(True)
+                lock_acquired_here = True
 
-            setLockStatus(True)    
-                
             from driver.token import get as get_val
             token = str(get_val("token", ""))
             if not token:
@@ -293,6 +314,9 @@ class Wx:
             print_error(f"Token操作失败: {str(e)}")
             return None
         finally:
+            # 只有在本方法获取的锁才释放，避免影响 switch_account 的锁
+            if lock_acquired_here:
+                setLockStatus(False)
             # 不在这里清理，让Call_Success处理清理
             if isClose:
                 self.controller.cleanup()

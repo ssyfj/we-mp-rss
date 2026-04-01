@@ -1,11 +1,13 @@
 """任务队列管理API"""
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
 from typing import Optional
 from core.auth import get_current_user_or_ak
-from core.queue.queue import TaskQueue
+from core.queue import TaskQueue
 from core.task.task import TaskScheduler
+from core.ws_manager import ws_manager
 from .base import success_response, error_response
 from core.log import logger
+import asyncio
 
 router = APIRouter(prefix="/task-queue", tags=["任务队列"])
 
@@ -143,3 +145,89 @@ async def get_scheduler_jobs(
     except Exception as e:
         logger.error(f"Get scheduler jobs error: {str(e)}")
         return error_response(code=500, message=str(e))
+
+
+@router.websocket("/ws")
+async def queue_websocket(websocket: WebSocket, token: Optional[str] = None):
+    """
+    WebSocket 端点，实时推送队列状态更新
+    
+    参数:
+        token: JWT 认证令牌（通过查询参数传递）
+    
+    消息格式:
+    {
+        "type": "queue_status",
+        "data": { ... 队列状态 ... }
+    }
+    """
+    # 验证 token
+    if not token:
+        await websocket.close(code=4001, reason="未提供认证令牌")
+        return
+    
+    try:
+        import jwt
+        from core.auth import SECRET_KEY, ALGORITHM, get_user
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if not username:
+            await websocket.close(code=4001, reason="无效的令牌")
+            return
+        
+        user = get_user(username)
+        if not user:
+            await websocket.close(code=4001, reason="用户不存在")
+            return
+    except jwt.ExpiredSignatureError:
+        await websocket.close(code=4001, reason="令牌已过期")
+        return
+    except jwt.PyJWTError as e:
+        logger.warning(f"WebSocket 认证失败: {e}")
+        await websocket.close(code=4001, reason="认证失败")
+        return
+    except Exception as e:
+        logger.error(f"WebSocket 认证异常: {e}")
+        await websocket.close(code=4001, reason="认证异常")
+        return
+    
+    await ws_manager.connect(websocket)
+    try:
+        # 立即发送当前状态
+        status = TaskQueue.get_detailed_status()
+        await websocket.send_json({
+            "type": "queue_status",
+            "data": status
+        })
+        
+        # 保持连接，定期推送状态（每3秒）
+        while True:
+            await asyncio.sleep(3)
+            status = TaskQueue.get_detailed_status()
+            await websocket.send_json({
+                "type": "queue_status",
+                "data": status
+            })
+    except WebSocketDisconnect:
+        ws_manager.disconnect(websocket)
+    except Exception as e:
+        logger.error(f"WebSocket 错误: {e}")
+        ws_manager.disconnect(websocket)
+
+
+async def broadcast_queue_status():
+    """广播队列状态到所有 WebSocket 连接"""
+    status = TaskQueue.get_detailed_status()
+    await ws_manager.broadcast({
+        "type": "queue_status",
+        "data": status
+    })
+
+
+def broadcast_queue_status_sync():
+    """同步版本：广播队列状态"""
+    status = TaskQueue.get_detailed_status()
+    ws_manager.broadcast_sync({
+        "type": "queue_status",
+        "data": status
+    })

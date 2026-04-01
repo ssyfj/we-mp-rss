@@ -8,6 +8,9 @@
             <template #icon><icon-refresh /></template>
             刷新
           </a-button>
+          <a-tag :color="wsConnected ? 'green' : 'orange'" size="small">
+            {{ wsConnected ? '实时连接' : '轮询模式' }}
+          </a-tag>
           <a-popconfirm content="确定要清空队列吗？正在执行的任务不会被中断。" @ok="handleClearQueue">
             <a-button status="warning" :loading="clearingQueue">
               <template #icon><icon-delete /></template>
@@ -193,10 +196,12 @@ import {
   type SchedulerStatus,
   type SchedulerJob,
 } from '@/api/taskQueue'
+import { getToken } from '@/utils/auth'
 
 const loading = ref(false)
 const clearingQueue = ref(false)
 const clearingHistory = ref(false)
+const wsConnected = ref(false)
 
 const queueStatus = ref<QueueStatus>({
   tag: '',
@@ -215,6 +220,76 @@ const schedulerStatus = ref<SchedulerStatus>({
 })
 
 const schedulerJobs = ref<SchedulerJob[]>([])
+
+// WebSocket 连接
+let ws: WebSocket | null = null
+let reconnectTimer: number | null = null
+let refreshTimer: number | null = null
+
+// 获取 WebSocket URL
+const getWsUrl = () => {
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  const host = window.location.host
+  // API_BASE = /api/v1/wx
+  const apiBase = '/api/v1/wx'
+  const token = getToken()
+  const tokenParam = token ? `?token=${encodeURIComponent(token)}` : ''
+  return `${protocol}//${host}${apiBase}/task-queue/ws${tokenParam}`
+}
+
+// 连接 WebSocket
+const connectWebSocket = () => {
+  if (ws) {
+    ws.close()
+  }
+
+  try {
+    const wsUrl = getWsUrl()
+    ws = new WebSocket(wsUrl)
+
+    ws.onopen = () => {
+      wsConnected.value = true
+      console.log('WebSocket 已连接')
+      // 清除重连定时器
+      if (reconnectTimer) {
+        clearInterval(reconnectTimer)
+        reconnectTimer = null
+      }
+    }
+
+    ws.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data)
+        if (message.type === 'queue_status' && message.data) {
+          queueStatus.value = message.data
+        }
+      } catch (e) {
+        console.error('解析 WebSocket 消息失败:', e)
+      }
+    }
+
+    ws.onclose = () => {
+      wsConnected.value = false
+      console.log('WebSocket 已断开')
+      // 自动重连
+      if (!reconnectTimer) {
+        reconnectTimer = window.setInterval(() => {
+          if (!wsConnected.value) {
+            connectWebSocket()
+          }
+        }, 5000)
+      }
+    }
+
+    ws.onerror = (error) => {
+      console.error('WebSocket 错误:', error)
+      wsConnected.value = false
+    }
+  } catch (error) {
+    console.error('WebSocket 连接失败:', error)
+    wsConnected.value = false
+  }
+}
 
 // 待执行任务表格列
 const pendingColumns = [
@@ -333,6 +408,20 @@ const formatTrigger = (trigger: string) => {
   return trigger
 }
 
+// 加载调度器数据
+const loadSchedulerData = async () => {
+  try {
+    const [schedulerData, jobsData] = await Promise.all([
+      getSchedulerStatus(),
+      getSchedulerJobs(),
+    ])
+    schedulerStatus.value = schedulerData
+    schedulerJobs.value = jobsData.jobs || []
+  } catch (error: any) {
+    console.error('Load scheduler data error:', error)
+  }
+}
+
 // 加载所有数据
 const refreshAll = async () => {
   loading.value = true
@@ -385,20 +474,34 @@ const handleClearHistory = async () => {
   }
 }
 
-// 自动刷新定时器
-let refreshTimer: number | null = null
+// 自动刷新定时器（WebSocket 失败时的备用方案）
+// refreshTimer 已在上方定义
 
 onMounted(() => {
+  // 立即加载所有数据
   refreshAll()
-  // 每10秒自动刷新
+  // 尝试连接 WebSocket
+  connectWebSocket()
+  // 备用轮询（如果 WebSocket 未连接则使用）
   refreshTimer = window.setInterval(() => {
-    refreshAll()
+    if (!wsConnected.value) {
+      refreshAll()
+    }
   }, 10000)
 })
 
 onUnmounted(() => {
+  if (ws) {
+    ws.close()
+    ws = null
+  }
+  if (reconnectTimer) {
+    clearInterval(reconnectTimer)
+    reconnectTimer = null
+  }
   if (refreshTimer) {
     clearInterval(refreshTimer)
+    refreshTimer = null
   }
 })
 </script>
