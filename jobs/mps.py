@@ -217,7 +217,6 @@ def add_job(feeds:list[Feed]=None,task:MessageTask=None,isTest=False):
         TaskQueue.add_task(do_job, feed, task, isTest, task_name=feed.mp_name)
         if isTest:
             print(f"测试任务，{feed.mp_name}，加入队列成功")
-            reload_job()
             break
         print(f"{feed.mp_name}，加入队列成功")
     print_success(TaskQueue.get_queue_info())
