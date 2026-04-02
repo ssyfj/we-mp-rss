@@ -146,7 +146,8 @@ class Wx:
             self.Token(isClose=False)
             if getStatus() is False:
                 self.Close()
-                self.GetCode(Success)
+                from jobs.failauth import send_wx_code
+                send_wx_code("账号过期，请重新扫码登录")
                 time.sleep(60)
                 return False
             time.sleep(1)
