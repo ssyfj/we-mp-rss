@@ -213,6 +213,15 @@ const routes = [
           permissions: ['admin'] 
         }
       },
+      {
+        path: 'wechat-status',
+        name: 'WechatStatus',
+        component: () => import('@/views/WechatStatus.vue'),
+        meta: { 
+          requiresAuth: true,
+          permissions: ['wechat:manage'] 
+        }
+      },
     ]
   },
   {

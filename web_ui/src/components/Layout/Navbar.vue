@@ -11,6 +11,12 @@
         </template>
         订阅管理
       </a-menu-item>
+      <a-menu-item key="/wechat-status">
+        <template #icon>
+          <icon-wechat />
+        </template>
+        公众号状态
+      </a-menu-item>
       <a-menu-item key="/export/records">
         <template #icon>
           <icon-export />
