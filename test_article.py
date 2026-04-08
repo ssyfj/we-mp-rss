@@ -517,11 +517,11 @@ def test_anti_bot_quick():
 
 if __name__=="__main__":
     # testLogin()
-    test_anti_bot_quick()
-    test_anti_bot_detection()
+    # test_anti_bot_quick()
+    # test_anti_bot_detection()
     # test_screenshot()
-    # test_Gather_Article()
-    # text_fix()    
+    test_Gather_Article()
+    text_fix()    
     # testWx_Api()
     # test_fetch_articles_without_content()
     # testWeb()
