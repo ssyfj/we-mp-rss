@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "@postman/postman-mcp-server": "^2.8.4"
+  }
+}
