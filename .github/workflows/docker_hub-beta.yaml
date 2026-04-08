@@ -8,6 +8,7 @@ on:
       - 'ReadMe.md'
       - 'Dockerfile'
       - 'requirements.txt'
+  workflow_dispatch:  # 支持手动触发
 env:
   REGISTRY: docker.io
   IMAGE_NAME: ${{ github.repository }}

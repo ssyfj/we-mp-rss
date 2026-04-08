@@ -6,6 +6,7 @@ on:
       - main
      paths:  # 仅在指定文件变化时触发（可选）
       - 'core/ver.py'
+  workflow_dispatch:  # 支持手动触发
 env:
   REGISTRY: docker.io
   IMAGE_NAME: ${{ github.repository }}
