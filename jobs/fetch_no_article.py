@@ -18,7 +18,7 @@ def fetch_articles_without_content():
             or_(Article.content.is_(None), Article.content == ""),
             Article.status != DATA_STATUS.FETCHING,  # 排除正在获取的文章
             Article.status != DATA_STATUS.DELETED  # 已删除文章不再参与自动补抓
-        ).limit(10).all()
+        ).order_by(Article.publish_time.desc()).limit(10).all()
         
         if not articles:
             print_warning("暂无需要获取内容的文章")

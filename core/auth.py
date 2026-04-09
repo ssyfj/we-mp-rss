@@ -19,27 +19,54 @@ from core.models.cascade_node import CascadeNode
 DB=db.Db(tag="用户连接")
 
 # 安全加固：JWT密钥配置
-# 优先从环境变量获取，否则生成随机密钥并警告
+# 优先从环境变量获取，否则从配置文件或持久化文件获取，最后才生成随机密钥
 import os
 import warnings
+from pathlib import Path
 
-_secret_from_env = os.environ.get('SECRET_KEY')
-if _secret_from_env:
-    SECRET_KEY = _secret_from_env
-else:
-    # 从配置文件获取
+_SECRET_KEY_FILE = Path(__file__).parent.parent / "data" / ".secret_key"
+
+def _load_or_generate_secret_key() -> str:
+    """加载或生成 SECRET_KEY，确保持久化"""
+    # 1. 优先从环境变量获取
+    _secret_from_env = os.environ.get('SECRET_KEY')
+    if _secret_from_env:
+        return _secret_from_env
+    
+    # 2. 从配置文件获取
     _secret_from_config = cfg.get("secret")
     if _secret_from_config and _secret_from_config not in ["csol2025", "we-mp-rss"]:
-        SECRET_KEY = _secret_from_config
-    else:
-        # 生成随机密钥
-        import secrets
-        SECRET_KEY = secrets.token_urlsafe(64)
+        return _secret_from_config
+    
+    # 3. 从持久化文件读取
+    if _SECRET_KEY_FILE.exists():
+        try:
+            _secret = _SECRET_KEY_FILE.read_text().strip()
+            if _secret and len(_secret) >= 32:
+                return _secret
+        except Exception:
+            pass
+    
+    # 4. 生成新的随机密钥并持久化
+    _new_secret = secrets.token_urlsafe(64)
+    try:
+        _SECRET_KEY_FILE.parent.mkdir(parents=True, exist_ok=True)
+        _SECRET_KEY_FILE.write_text(_new_secret)
         warnings.warn(
-            "⚠️ 安全警告: 未配置SECRET_KEY环境变量，已自动生成随机密钥。"
-            "建议在环境变量中设置SECRET_KEY以确保密钥持久化。",
+            "⚠️ 已自动生成 SECRET_KEY 并保存到 data/.secret_key 文件，"
+            "重启后 Token 将保持有效。建议在生产环境设置环境变量 SECRET_KEY。",
             UserWarning
         )
+    except Exception as e:
+        warnings.warn(
+            f"⚠️ 无法保存 SECRET_KEY 到文件: {e}，重启后 Token 将失效。"
+            "建议设置环境变量 SECRET_KEY。",
+            UserWarning
+        )
+    
+    return _new_secret
+
+SECRET_KEY = _load_or_generate_secret_key()
 
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(cfg.get("token_expire_minutes",30))
