@@ -223,12 +223,51 @@ class WXArticleFetcher:
         finally:
             self.Close() 
     async def async_get_article_content(self,url:str)->Dict:
+        """异步获取文章内容
+        
+        使用独立线程运行同步代码,避免 asyncio 环境冲突
+        """
         import asyncio
-        from concurrent.futures import ThreadPoolExecutor
-        loop = asyncio.get_running_loop()
-        with ThreadPoolExecutor() as pool:
-            future = loop.run_in_executor(pool, self.get_article_content, url)
-        return await future
+        import threading
+        import queue
+        import os
+        
+        result_queue = queue.Queue()
+        
+        def worker():
+            """在工作线程中运行同步代码"""
+            try:
+                # 在新线程中创建新的实例,避免共享 controller
+                from .playwright_driver import PlaywrightController
+                
+                # 创建新的 fetcher 实例
+                fetcher = WXArticleFetcher(wait_timeout=self.wait_timeout)
+                fetcher.browser_proxy_url = self.browser_proxy_url
+                
+                result = fetcher.get_article_content(url)
+                result_queue.put(('success', result))
+            except Exception as e:
+                result_queue.put(('error', str(e)))
+        
+        # 创建并启动线程
+        thread = threading.Thread(target=worker, daemon=True)
+        thread.start()
+        
+        # 等待线程完成
+        thread.join(timeout=60)  # 60秒超时
+        
+        if thread.is_alive():
+            raise Exception("获取文章内容超时")
+        
+        # 获取结果
+        if not result_queue.empty():
+            status, data = result_queue.get()
+            if status == 'success':
+                return data
+            else:
+                raise Exception(data)
+        else:
+            raise Exception("未获取到结果")
     def get_article_content(self, url: str) -> Dict:
         """获取单篇文章详细内容
         
@@ -260,7 +299,9 @@ class WXArticleFetcher:
                 }
             }
         try:
-            self.controller.start_browser(proxy_url=self.browser_proxy_url)
+            # 检查浏览器是否已启动,避免重复启动
+            if not self.controller.is_browser_started():
+                self.controller.start_browser(proxy_url=self.browser_proxy_url)
         
             self.page = self.controller.page
             if cfg.get("proxy.deno_url","")!="" and cfg.get("proxy.enabled",False):
@@ -270,8 +311,8 @@ class WXArticleFetcher:
             page = self.page
             content=""
             
-            # 等待页面加载
-            # page.wait_for_load_state("networkidle")
+            # 等待页面加载完成
+            page.wait_for_load_state("domcontentloaded")
             # body = page.evaluate('() => document.body.innerText')
             body= page.locator("body").text_content().strip()
             
@@ -309,6 +350,29 @@ class WXArticleFetcher:
             if "Unable to view this content because it violates regulation" in body:     
                 info["content"]="DELETED"
                 raise Exception("违规无法查看")
+            if "轻触阅读原文" in body:
+                print_info("检测到文章末尾的阅读原文提示,尝试点击")
+                try:
+                    # 查找按钮并检查是否可见
+                    button = page.locator('text=轻触阅读原文')
+                    button_count = button.count()
+                    
+                    if button_count > 0:
+                        # 等待按钮可见,最多等待5秒
+                        try:
+                            button.first.wait_for(state="visible", timeout=5000)
+                            button.first.click()
+                            time.sleep(2)  # 等待内容加载
+                            print_info("成功点击阅读原文按钮")
+                        except Exception as e:
+                            # 按钮不可见或点击失败,继续处理当前内容
+                            print_warning(f"阅读原文按钮不可见或点击失败: {str(e)}")
+                            print_info("继续处理当前页面内容")
+                    else:
+                        print_warning("未找到阅读原文按钮")
+                except Exception as e:
+                    # 任何异常都不影响继续处理
+                    print_warning(f"处理阅读原文按钮时出错: {str(e)}")
             
 
             # 获取标题

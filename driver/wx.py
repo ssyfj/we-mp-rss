@@ -310,6 +310,15 @@ class Wx:
             print_error(f"定时刷新任务失败: {str(e)}")
             # 不再抛出异常，避免无限循环
     def Token(self, callback=None,isClose=True):
+        """使用token登录
+        
+        Args:
+            callback: 登录成功回调函数
+            isClose: 是否在完成后关闭浏览器
+            
+        Returns:
+            登录成功返回session数据,失败返回None或False
+        """
         try:
             self.CallBack = callback
             if not getStatus():
@@ -322,31 +331,37 @@ class Wx:
                 print_warning("未找到有效的token")
                 return None
             
-            # 创建新的控制器实例避免线程冲突（greenlet 跨线程错误）
-            # 始终创建新实例，确保 driver 在当前线程中初始化
-            controller = PlaywrightController()
+            # 复用已有的controller实例,避免重复创建
+            if not hasattr(self, 'controller') or self.controller is None:
+                self.controller = PlaywrightController()
+            
+            controller = self.controller
             # 保存到临时变量，让 Call_Success 和 _extract_wechat_data 能使用
             self._temp_controller = controller
-            controller.start_browser()    
-            controller.open_url(f"{self.WX_HOME}?t=home/index&lang=zh_CN&token={token}")
             
-            cookie = Store.load()
-            if cookie:
-                # 为每个cookie添加必要的domain字段
-                for c in cookie:
-                    if 'domain' not in c:
-                        c['domain'] = '.weixin.qq.com'
-                    if 'path' not in c:
-                        c['path'] = '/'
-                controller.add_cookies(cookie)
-            # 为单个token cookie添加必要的字段
-            token_cookie = {
-                "name": "token", 
-                "value": token,
-                "domain": ".weixin.qq.com",
-                "path": "/"
-            }
-            controller.add_cookie(token_cookie)
+            # 检查浏览器是否已启动
+            if not controller.is_browser_started():
+                controller.start_browser()    
+                controller.open_url(f"{self.WX_HOME}?t=home/index&lang=zh_CN&token={token}")
+                
+                cookie = Store.load()
+                if cookie:
+                    # 为每个cookie添加必要的domain字段
+                    for c in cookie:
+                        if 'domain' not in c:
+                            c['domain'] = '.weixin.qq.com'
+                        if 'path' not in c:
+                            c['path'] = '/'
+                    controller.add_cookies(cookie)
+                # 为单个token cookie添加必要的字段
+                token_cookie = {
+                    "name": "token", 
+                    "value": token,
+                    "domain": ".weixin.qq.com",
+                    "path": "/"
+                }
+                controller.add_cookie(token_cookie)
+            
             page=controller.page
             qrcode = page.locator("#jumpUrl")
             qrcode.wait_for(state="visible", timeout=self.wait_time * 1000)
@@ -364,14 +379,15 @@ class Wx:
             print_error(f"Token操作失败: {str(e)}")
             return None
         finally:
-            # 清理当前线程创建的 controller
-            if isClose:
-                try:
-                    controller.cleanup()
-                except Exception:
-                    pass
             # 清理临时控制器引用
             self._temp_controller = None
+            # 只在明确要求关闭时才清理
+            if isClose:
+                try:
+                    if hasattr(self, 'controller') and self.controller:
+                        self.controller.cleanup()
+                except Exception:
+                    pass
     def isLock(self):             
         if self.isLock:
             if os.path.exists(self.wx_login_url):

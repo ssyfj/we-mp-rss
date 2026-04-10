@@ -110,43 +110,48 @@ def text_fix():
         f.write(fix_html(content))
     
 def test_screenshot():
-    from playwright.sync_api import sync_playwright,TimeoutError
-    playwright=sync_playwright().start()
-    browser = playwright.chromium.launch(headless=False)
-    context = browser.new_context()
-    page = context.new_page()
-
-    # 导航到目标页面
-    page.goto('https://mp.weixin.qq.com/')  # 替换为实际的目标URL
-    # 定义一个标志来指示是否已经找到目标URL
+    """测试截图功能,使用 PlaywrightController 统一管理资源"""
+    from driver.playwright_driver import PlaywrightController
+    from playwright.sync_api import TimeoutError
     
-    # 等待页面加载完成
-    # 查找图片元素
-    image_element = page.query_selector('.login__type__container__scan__qrcode')  # 替换为实际的图片src属性值
-    path='./static/qrcode.png'
-    target_substring="home"
-    if image_element:
-        # 截图保存
-        image_element.screenshot(path=path)
-        print(f'图片已成功截取并保存为 {path}')
-    else:
-        print('未找到指定的图片元素')
-       
-    navigation_completed = False
+    controller = PlaywrightController()
+    
+    try:
+        # 启动浏览器
+        page = controller.start_browser(headless=False)
+        
+        # 导航到目标页面
+        page.goto('https://mp.weixin.qq.com/')
+        
+        # 查找图片元素
+        image_element = page.query_selector('.login__type__container__scan__qrcode')
+        path='./static/qrcode.png'
+        target_substring="home"
+        
+        if image_element:
+            # 截图保存
+            image_element.screenshot(path=path)
+            print(f'图片已成功截取并保存为 {path}')
+        else:
+            print('未找到指定的图片元素')
+        
+        navigation_completed = False
 
-    # # 监听页面导航事件
-    def handle_frame_navigated(frame):
-        nonlocal navigation_completed
-        current_url = frame.url
-        if target_substring in current_url and not navigation_completed:
-            print(f"页面已成功跳转到包含 '{target_substring}' 的URL: {current_url}")
-            navigation_completed = True
-    page.on('framenavigated', handle_frame_navigated)
-    page.wait_for_event("framenavigated")
-    print(page.url)
-    # 关闭浏览器
-    context.close()
-    browser.close()
+        # 监听页面导航事件
+        def handle_frame_navigated(frame):
+            nonlocal navigation_completed
+            current_url = frame.url
+            if target_substring in current_url and not navigation_completed:
+                print(f"页面已成功跳转到包含 '{target_substring}' 的URL: {current_url}")
+                navigation_completed = True
+        
+        page.on('framenavigated', handle_frame_navigated)
+        page.wait_for_event("framenavigated")
+        print(page.url)
+        
+    finally:
+        # 确保资源被正确清理
+        controller.cleanup()
 
 
 
