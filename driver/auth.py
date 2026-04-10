@@ -1,4 +1,5 @@
 import threading
+import asyncio
 from core.print import print_warning
 from driver.base import WX_InterFace
 import os
@@ -8,10 +9,15 @@ from driver.success import Success
 
 def auth():
     def run_auth():
-        wx=WX_InterFace()
-        # wx.Token(callback=Success)
-        wx.switch_account()
-    
+        wx = WX_InterFace()
+        # 在新的事件循环中运行异步方法
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(wx.switch_account())
+        finally:
+            loop.close()
+
     thread = threading.Thread(target=run_auth)
     thread.start()
     thread.join()  # 可选：等待完成

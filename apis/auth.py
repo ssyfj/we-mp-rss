@@ -51,7 +51,7 @@ async def qr_status(current_user=Depends(get_current_user)):
      return success_response(WX_API.QrStatus())    
 @router.get("/qr/over",summary="扫码完成")
 async def qr_success(current_user=Depends(get_current_user)):
-     return success_response(WX_API.Close())    
+     return success_response(await WX_API.Close())    
 @router.post("/login", summary="用户登录")
 async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     user = authenticate_user(form_data.username, form_data.password)
@@ -435,11 +435,12 @@ async def switch_wechat_account(current_user: dict = Depends(get_current_user)):
     Authorization: Bearer {token}
     ```
     """
+    import asyncio
+
     try:
-        # 调用切换账号方法
-        from core.thread import ThreadManager
-        thread = ThreadManager(target=WX_API.switch_account,args=())  # 传入函数名
-        thread.start()  # 启动线程
+        # 调用切换账号方法（异步）
+        result = await WX_API.switch_account()
+        return success_response(result, "切换账号成功" if result else "切换账号失败")
     except HTTPException:
         raise
     except Exception as e:

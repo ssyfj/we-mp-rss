@@ -1,3 +1,11 @@
+import sys
+import asyncio
+
+# Windows 需要使用 ProactorEventLoop 以支持 Playwright 子进程
+# 必须在任何事件循环创建之前设置
+if sys.platform == 'win32':
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+
 from fastapi import FastAPI, Request, APIRouter, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles

@@ -6,6 +6,7 @@ import time
 import base64
 import re
 import os
+import asyncio
 from datetime import datetime
 from typing import Dict
 from bs4 import BeautifulSoup

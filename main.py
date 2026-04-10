@@ -1,3 +1,10 @@
+import sys
+import asyncio
+
+# Windows 需要使用 ProactorEventLoop 以支持 Playwright 子进程
+if sys.platform == 'win32':
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+
 from core.config import cfg
 if cfg.get("redis.server.enabled", False):
         from tools.redis_server import run_redis_server
@@ -72,10 +79,38 @@ if __name__ == '__main__':
     AutoReload=cfg.get("server.auto_reload",False)
     thread=cfg.get("server.threads",1)
     reload_dirs = ["apis", "core", "driver", "jobs", "schemas", "tools", "views", "web_ui"]
-    uvicorn.run("web:app", host="0.0.0.0", port=int(cfg.get("port",8001)),
-            reload=AutoReload,
+    
+    # Windows 上禁用 reload 模式，因为会导致事件循环问题
+    if sys.platform == 'win32' and AutoReload:
+        print_warning("Windows 平台上禁用 reload 模式以确保 Playwright 正常工作")
+        AutoReload = False
+    
+    # Windows 上使用自定义配置确保 ProactorEventLoop
+    if sys.platform == 'win32':
+        # 使用 uvicorn 的 Config 和 Server 类来控制事件循环
+        config = uvicorn.Config(
+            "web:app",
+            host="0.0.0.0",
+            port=int(cfg.get("port", 8001)),
+            reload=False,
             reload_dirs=reload_dirs,
-            reload_excludes=['static','data','node_modules','*.pnpm*'],
+            reload_excludes=['static', 'data', 'node_modules', '*.pnpm*'],
             workers=thread,
-            )
+        )
+        server = uvicorn.Server(config)
+        
+        # 确保使用 ProactorEventLoop
+        if not isinstance(asyncio.get_event_loop(), asyncio.ProactorEventLoop):
+            asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        
+        asyncio.run(server.serve())
+    else:
+        uvicorn.run("web:app", host="0.0.0.0", port=int(cfg.get("port",8001)),
+                reload=Fa,
+                reload_dirs=reload_dirs,
+                reload_excludes=['static','data','node_modules','*.pnpm*'],
+                workers=thread,
+                )
     pass

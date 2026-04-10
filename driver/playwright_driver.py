@@ -12,6 +12,10 @@ from datetime import datetime
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
+# Windows 需要使用 ProactorEventLoop 以支持 Playwright 子进程
+if sys.platform == 'win32':
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+
 from core.print import print_error, print_info, print_warning
 from driver.anti_crawler_config import AntiCrawlerConfig
 
@@ -99,6 +103,16 @@ class PlaywrightController:
         start_time = time.time()
 
         try:
+            # Windows 上检查事件循环类型
+            if sys.platform == 'win32':
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop_type = type(loop).__name__
+                    if self.debug:
+                        print_info(f"当前事件循环类型: {loop_type}")
+                except RuntimeError:
+                    pass
+
             # 导入 async_playwright
             from playwright.async_api import async_playwright
 
@@ -349,3 +363,35 @@ class PlaywrightController:
     def browser(self):
         """获取浏览器对象"""
         return self._browser
+
+    # ========== 辅助方法 ==========
+
+    def is_browser_started(self) -> bool:
+        """检查浏览器是否已启动"""
+        return self._browser is not None and self._page is not None
+
+    async def get_cookies(self) -> List[Dict]:
+        """获取所有 cookies（异步）"""
+        if self._context is None:
+            raise RuntimeError("浏览器上下文未初始化")
+        return await self._context.cookies()
+
+    async def add_cookies(self, cookies: List[Dict]) -> None:
+        """添加多个 cookies（异步）"""
+        if self._context is None:
+            raise RuntimeError("浏览器上下文未初始化")
+        await self._context.add_cookies(cookies)
+
+    async def add_cookie(self, cookie: Dict) -> None:
+        """添加单个 cookie（异步）"""
+        if self._context is None:
+            raise RuntimeError("浏览器上下文未初始化")
+        await self._context.add_cookies([cookie])
+
+    async def cleanup(self) -> None:
+        """清理资源（异步）"""
+        await self.close()
+
+    async def Close(self) -> None:
+        """关闭浏览器（异步，兼容旧代码）"""
+        await self.close()
