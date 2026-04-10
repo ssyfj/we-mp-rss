@@ -31,7 +31,12 @@ class WXArticleFetcher:
         
         if cfg.get("proxy.enabled", False):
             self.browser_proxy_url = cfg.get("proxy.http_url", "")
-            
+
+    async def Close(self):
+        """关闭浏览器（异步）"""
+        if self.controller:
+            await self.controller.Close()
+
     async def get_article_content(self, url: str) -> Dict:
         """
         获取文章内容(异步)

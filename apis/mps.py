@@ -186,7 +186,7 @@ async def _run_add_featured_article_task(task_id: str, url: str):
     finally:
         if fetcher is not None:
             try:
-                fetcher.Close()
+                await fetcher.Close()
             except Exception:
                 pass
         session.close()

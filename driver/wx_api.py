@@ -671,11 +671,11 @@ class WeChatAPI:
             logger.error(f"获取账号信息失败: {str(e)}")
             return None
 
-    def switch_account(self,username:str=""):
-        """切换微信公众号账号"""
+    async def switch_account(self,username:str=""):
+        """切换微信公众号账号（异步）"""
         self.login_with_token()
         from driver.wx import WX_API
-        WX_API.switch_account()
+        await WX_API.switch_account()
         return
         url = f"{self.base_url}/cgi-bin/switchacct?action=switch"
         
