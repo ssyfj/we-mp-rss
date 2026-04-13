@@ -240,6 +240,103 @@ class WXArticleFetcher:
             info["fetch_error"] = str(e)
             print_error(f"获取文章内容失败: {str(e)}")
             return info
+
+    async def _scroll_to_bottom_and_load_images(self, page, scroll_step: int = 500, max_scrolls: int = 50, wait_time: int = 300):
+        """
+        模拟滚动页面到底部并等待图片加载完成
+        
+        Args:
+            page: Playwright page 对象
+            scroll_step: 每次滚动的像素
+            max_scrolls: 最大滚动次数
+            wait_time: 每次滚动后的等待时间(毫秒)
+        """
+        try:
+            # 获取页面总高度
+            total_height = await page.evaluate('() => document.body.scrollHeight')
+            current_position = 0
+            
+            print_info(f"开始滚动加载图片，页面总高度: {total_height}px")
+            
+            scroll_count = 0
+            while current_position < total_height and scroll_count < max_scrolls:
+                # 滚动一段距离
+                current_position += scroll_step
+                await page.evaluate(f'() => window.scrollTo(0, {current_position})')
+                
+                # 等待图片加载
+                await asyncio.sleep(wait_time / 1000)
+                
+                # 更新页面总高度（可能因为懒加载而变化）
+                total_height = await page.evaluate('() => document.body.scrollHeight')
+                scroll_count += 1
+                
+                # 每隔几次滚动输出进度
+                if scroll_count % 5 == 0:
+                    print_info(f"滚动进度: {current_position}/{total_height}px ({scroll_count}次)")
+            
+            # 滚动到顶部，然后再到底部确保所有图片加载
+            await page.evaluate('() => window.scrollTo(0, 0)')
+            await asyncio.sleep(0.5)
+            
+            # 最后一次性滚动到底部
+            await page.evaluate('() => window.scrollTo(0, document.body.scrollHeight)')
+            await asyncio.sleep(1)
+            
+            # 等待所有图片加载完成
+            await self._wait_for_images_to_load(page)
+            
+            print_success(f"滚动完成，共滚动 {scroll_count} 次")
+            
+        except Exception as e:
+            print_warning(f"滚动加载图片时出错: {e}")
+
+    async def _wait_for_images_to_load(self, page, timeout: int = 10000):
+        """
+        等待页面中所有图片加载完成
+        
+        Args:
+            page: Playwright page 对象
+            timeout: 超时时间(毫秒)
+        """
+        try:
+            # 使用 JavaScript 检查所有图片是否加载完成
+            await page.evaluate('''
+                () => {
+                    return new Promise((resolve) => {
+                        const images = document.querySelectorAll('img');
+                        let loaded = 0;
+                        const total = images.length;
+                        
+                        if (total === 0) {
+                            resolve();
+                            return;
+                        }
+                        
+                        const checkLoaded = () => {
+                            loaded++;
+                            if (loaded >= total) {
+                                resolve();
+                            }
+                        };
+                        
+                        images.forEach(img => {
+                            if (img.complete) {
+                                checkLoaded();
+                            } else {
+                                img.onload = checkLoaded;
+                                img.onerror = checkLoaded;
+                            }
+                        });
+                        
+                        // 超时保护
+                        setTimeout(resolve, %d);
+                    });
+                }
+            ''' % timeout)
+            print_info(f"图片加载等待完成")
+        except Exception as e:
+            print_warning(f"等待图片加载时出错: {e}")
             
     async def _extract_publish_time(self, page) -> int:
         """
