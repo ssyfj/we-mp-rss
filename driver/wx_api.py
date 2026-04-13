@@ -21,7 +21,7 @@ from io import BytesIO
 
 from sqlalchemy import true
 
-from core.print import print_warning,print_success
+from core.print import print_warning,print_success,print_error
 from .token import get as get_token,set_token
 import psutil
 import logging
@@ -476,10 +476,10 @@ class WeChatAPI:
             from driver.cookies import expire
             # 调用成功回调
             if self._get_account_info() is not  None:
-                logger.info("登录成功！")
+                print_success("登录成功！")
                 return True
         except Exception as e:
-            logger.error(f"处理登录失败: {str(e)}")
+            print_error(f"处理登录失败: {str(e)}")
         return False
     def _extract_login_info(self):
         """
@@ -631,7 +631,7 @@ class WeChatAPI:
             account_list=self._get_account_list()
 
             if account_list is None:
-                logger.error("获取账号列表失败")
+                print_error("获取账号列表失败")
                 return None
             # 提取 biz_list 的第一项数据
             biz_list=account_list['biz_list']['list']
@@ -668,64 +668,14 @@ class WeChatAPI:
             return account_info
             
         except Exception as e:
-            logger.error(f"获取账号信息失败: {str(e)}")
+            print_error(f"获取账号信息失败: {str(e)}")
             return None
 
     async def switch_account(self,username:str=""):
         """切换微信公众号账号（异步）"""
         self.login_with_token()
         from driver.wx import WX_API
-        await WX_API.switch_account()
-        return
-        url = f"{self.base_url}/cgi-bin/switchacct?action=switch"
-        
-        headers = {
-            "accept": "*/*",
-            "accept-language": "zh-CN,zh;q=0.9",
-            "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
-            "priority": "u=1, i",
-            "sec-ch-ua": "\"Not?A_Brand\";v=\"99\", \"Chromium\";v=\"130\"",
-            "sec-ch-ua-mobile": "?0",
-            "sec-ch-ua-platform": "\"Windows\"",
-            "sec-fetch-dest": "empty",
-            "sec-fetch-mode": "cors",
-            "sec-fetch-site": "same-origin",
-            "x-requested-with": "XMLHttpRequest",
-        }
-        headers["Referer"]=f"{self.base_url}/cgi-bin/home?t=home/index&lang=zh_CN&token={self.token}"
-        params = {
-            "f": "json",
-            "username": username,
-            "fingerprint": self.fingerprint,
-            "token": self.token,
-            "lang": "zh_CN",
-            "ajax": "1"
-        }
-        
-        try:
-            response =  self.session.post(
-                url, 
-                headers=headers, 
-                data=params,
-                cookies={},
-                allow_redirects=True
-            )
-            
-            response.raise_for_status()  # 检查HTTP错误
-            
-            # 解析JSON响应
-            data = response.json()
-            print("切换账号响应:", data)
-            if data.get("base_resp").get("ret") == 0:
-                self._redirect()
-            return data
-            
-        except requests.exceptions.RequestException as e:
-            print(f"请求出错: {e}")
-            return None
-        except json.JSONDecodeError as e:
-            print(f"JSON解析出错: {e}")
-        return None
+        return await WX_API.switch_account(username)
     def _redirect(self):
         url=f"https://mp.weixin.qq.com/cgi-bin/loginpage?url=/cgi-bin/home?t=home/index&lang=zh_CN&token={self.token}"
         response=self.session.get(url)
@@ -793,7 +743,7 @@ class WeChatAPI:
             return None
             
         except Exception as e:
-            logger.error(f"获取账号列表失败: {str(e)}")
+            print_error(f"获取账号列表失败: {str(e)}")
             return None
 
     def _clean_qr_code(self):
@@ -838,14 +788,14 @@ class WeChatAPI:
                
                 if 'home'  in response.url:
                     self.is_logged_in = True
-                    logger.info("Token登录成功")
+                    print_success("Token登录成功")
                     return self._handle_login_success()
                 else:
-                    logger.warning("Token登录失败")
+                    print_warning("Token登录失败")
                     return False
                     
         except Exception as e:
-            logger.error(f"Token登录失败: {str(e)}")
+            print_error(f"Token登录失败: {str(e)}")
             raise e
             return False
 
