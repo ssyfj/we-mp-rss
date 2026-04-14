@@ -141,12 +141,13 @@ class RESPParser:
 class MemoryStore:
     """内存数据存储"""
     
-    def __init__(self, max_memory_mb: int = 128):
+    def __init__(self, max_memory_mb: int = 128, persist_file: Optional[str] = None):
         self.data: Dict[str, Any] = {}
         self.expires: Dict[str, float] = {}
         self.max_memory = max_memory_mb * 1024 * 1024
         self.current_memory = 0
         self.lock = threading.RLock()
+        self.persist_file = persist_file  # 持久化文件路径
         
         # 数据结构类型
         self.type_map: Dict[str, str] = {}  # key -> type (string, list, hash, set)
@@ -229,6 +230,10 @@ class MemoryStore:
             
             if ttl:
                 self.expires[key] = time.time() + ttl
+            
+            # 自动保存到文件
+            if self.persist_file:
+                self._auto_save()
             
             return True
     
@@ -651,6 +656,21 @@ class MemoryStore:
             with open(filepath, 'w', encoding='utf-8') as f:
                 json.dump(data, f, ensure_ascii=False, default=str)
     
+    def _auto_save(self):
+        """自动保存数据到文件（内部方法）"""
+        try:
+            if self.persist_file:
+                os.makedirs(os.path.dirname(self.persist_file), exist_ok=True)
+                data = {
+                    'data': self.data,
+                    'expires': self.expires,
+                    'type_map': self.type_map
+                }
+                with open(self.persist_file, 'w', encoding='utf-8') as f:
+                    json.dump(data, f, ensure_ascii=False, default=str)
+        except Exception as e:
+            print(f"[WARN] 自动保存数据失败: {e}")
+    
     def load(self, filepath: str):
         """从文件加载数据"""
         if os.path.exists(filepath):
@@ -673,13 +693,13 @@ class RedisServer:
         self.host = host
         self.port = port
         self.password = password
-        self.store = MemoryStore(max_memory_mb)
+        self.data_dir = os.path.join(os.path.dirname(__file__), '..', 'data', 'redis')
+        self.rdb_file = os.path.join(self.data_dir, 'dump.rdb')
+        self.store = MemoryStore(max_memory_mb, persist_file=self.rdb_file)
         self.running = False
         self.server_socket = None
         self.clients = []
         self.start_time = time.time()
-        self.data_dir = os.path.join(os.path.dirname(__file__), '..', 'data', 'redis')
-        self.rdb_file = os.path.join(self.data_dir, 'dump.rdb')
         
         # 统计
         self.stats = {

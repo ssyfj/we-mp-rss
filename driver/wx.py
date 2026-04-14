@@ -210,7 +210,8 @@ class Wx:
                                     pass
                                 # 添加延迟，避免 Playwright memoryview 缓冲区问题
                                 await asyncio.sleep(0.5)
-                                await self.Close()
+                                # 注意：切换成功后不立即关闭浏览器，让新的session有时间稳定
+                                # await self.Close()  # 移除此行，避免过早关闭导致session失效
                                 sys_notice(f"账号切换成功\n- 账号名称: {account_name} \n- 账号ID: {account_id} \n - Token: {token} \n- 过期时间: {exp_time}", str(cfg.get("server.code_title","WeRss账号切换成功")))
                                 return True
                             else:
@@ -232,6 +233,9 @@ class Wx:
 
         except Exception as e:
             print_error(f"切换账号时发生错误: {str(e)}")
+            # 切换失败时清理资源
+            self.cleanup_resources()
+            await self.Close()
             return False
         finally:
             # 恢复任务队列
@@ -246,8 +250,7 @@ class Wx:
                     print_info("恢复内容任务队列...")
                     ContentTaskQueue.run_task_background()
                     print_success("内容任务队列已恢复")
-                self.cleanup_resources()  # 切换账号后清理资源，确保环境干净
-                await self.Close()  # 切换账号后关闭浏览器，确保新登录环境干净
+                # 注意：不再无条件清理资源，只在失败时清理（已在except块中处理）
             except Exception as e:
                 print_error(f"恢复队列失败: {e}") 
     def GetCode(self,CallBack=None,Notice=None):
@@ -356,7 +359,6 @@ class Wx:
             # 检查浏览器是否已启动
             if not controller.is_browser_started():
                 await controller.start_browser()
-                await controller.open_url(f"{self.WX_HOME}?t=home/index&lang=zh_CN&token={token}")
 
                 cookie = Store.load()
                 if cookie:
@@ -367,15 +369,7 @@ class Wx:
                         if 'path' not in c:
                             c['path'] = '/'
                     await controller.add_cookies(cookie)
-                # 为单个token cookie添加必要的字段
-                token_cookie = {
-                    "name": "token",
-                    "value": token,
-                    "domain": ".weixin.qq.com",
-                    "path": "/"
-                }
-                await controller.add_cookie(token_cookie)
-
+            await controller.open_url(f"{self.WX_HOME}?t=home/index&lang=zh_CN&token={token}")
             page = controller.page
             qrcode = page.locator("#jumpUrl")
             await qrcode.wait_for(state="visible", timeout=self.wait_time * 1000)
@@ -384,14 +378,17 @@ class Wx:
             hasLogin = page.locator("body:has-text('使用账号登录')")
             if await hasLogin.count() > 0:
                 self._haslogin = False
+                from jobs.failauth import send_wx_code
+                import threading
+                threading.Thread(target=send_wx_code,args=(f"公众号平台登录失效,请重新登录",)).start()
                 return False
             return await self.Call_Success()
         except ImportError as e:
             print_error(f"导入模块失败: {str(e)}")
-            return None
+            return False
         except Exception as e:
             print_error(f"Token操作失败: {str(e)}")
-            return None
+            return False
         finally:
             # 清理临时控制器引用
             self._temp_controller = None

@@ -1,3 +1,5 @@
+from tools.redis_server import run_redis_server
+run_redis_server(config_path="config.yaml")
 from os import remove
 from driver.wxarticle import Web
 from driver.success import Success
@@ -535,6 +537,7 @@ def switchaccount():
     import asyncio
     from driver.base import WX_API
     asyncio.run(WX_API.switch_account())
+    input("按回车键退出")
     pass
 if __name__=="__main__":
     # testLogin()
