@@ -534,6 +534,12 @@ class Web:
                         if style_value:
                             tag['style'] = style_value
 
+                # 2.1 将section标签替换为div标签
+                section_tags = js_content_div.find_all('section')
+                for section in section_tags:
+                    section.name = 'fragment'
+                    section.attrs['_source']="we-mp-rss"
+
                 # 3. 处理背景类资源 (background-image, background等)
                 # 查找所有带有style属性的元素
                 all_elements = js_content_div.find_all(attrs={'style': True})
