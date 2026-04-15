@@ -25,7 +25,7 @@ async def print(
     article_id: str,
 ):
     return article_detail_view(request, article_id, isprint=True)
-router = APIRouter(tags=["文章详情"])
+
 @router.get("/article/{article_id}", response_class=HTMLResponse, summary="文章详情页")
 @cache_view("article_detail", ttl=1)  # 缓存1小时
 async def article_detail_view(
