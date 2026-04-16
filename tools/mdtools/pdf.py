@@ -110,7 +110,17 @@ class WebToPDFConverter:
     async def _create_context(self, **kwargs) -> BrowserContext:
         """创建浏览器上下文"""
         browser = await self._ensure_browser()
-        self._context = await browser.new_context(**kwargs)
+        
+        # 设置默认的中文语言和中国时区
+        default_context_options = {
+            'locale': 'zh-CN',
+            'timezone_id': 'Asia/Shanghai',
+        }
+        
+        # 合并用户提供的选项（用户选项优先）
+        default_context_options.update(kwargs)
+        
+        self._context = await browser.new_context(**default_context_options)
         return self._context
     
     async def _generate_pdf_from_screenshots(
@@ -338,6 +348,20 @@ class WebToPDFConverter:
                 # 等待特定元素
                 if wait_for_selector:
                     await page.wait_for_selector(wait_for_selector, timeout=self.timeout)
+                
+                # 针对微信公众号文章的特殊处理
+                if 'mp.weixin.qq.com' in url:
+                    try:
+                        # 移除微信公众号底部工具栏
+                        await page.evaluate("""
+                            const bottomBar = document.getElementById('js_article_bottom_bar');
+                            if (bottomBar) {
+                                bottomBar.remove();
+                            }
+                        """)
+                        logging.info("已移除微信公众号底部工具栏")
+                    except Exception as e:
+                        logging.warning(f"移除微信公众号底部工具栏失败: {e}")
                 
                 # 滚动页面以触发图片加载
                 await self._scroll_page_to_load_images(page)
@@ -693,15 +717,20 @@ if __name__ == "__main__":
     os.makedirs("./data", exist_ok=True)
     
     try:
+        urls=[
+            "https://mp.weixin.qq.com/s/0Bzw7AY754tDT9anJtsSCw",
+            "http://127.0.0.1:8001/views/print/FEATURED_ARTICLES-CFyDBjG1qwm3YtyL8kkR7g"
+        ]
         print("开始测试 PDF 转换...")
-        pdf_file="./data/test.pdf"
-        success = url_to_pdf("http://192.168.100.58:8001/views/print/FEATURED_ARTICLES-CFyDBjG1qwm3YtyL8kkR7g", pdf_file,browser_type="webkit")
-        from pdf_extractor import pdf_to_docx
-        pdf_to_docx(pdf_file,f"{pdf_file.replace('.pdf','.docx')}")
-        if success:
-            print("✓ PDF 转换成功！")
-        else:
-            print("✗ PDF 转换失败")
+        for i,url in enumerate(urls):
+            pdf_file=f"./data/test_{i}.pdf"
+            success = url_to_pdf(url, pdf_file,browser_type="webkit")
+            from pdf_extractor import pdf_to_docx
+            pdf_to_docx(pdf_file,f"{pdf_file.replace('.pdf','.docx')}")
+            if success:
+                print(f"{url}✓ PDF 转换成功！")
+            else:
+                print(f"{url}✗ PDF 转换失败")
     except Exception as e:
         print(f"✗ 测试失败: {e}")
         import traceback

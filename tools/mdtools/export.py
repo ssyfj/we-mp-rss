@@ -1,7 +1,7 @@
 from .md2doc import MarkdownToWordConverter
 from core.models import Article
 from core.db import DB
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 import csv
 import zipfile
@@ -30,7 +30,7 @@ def process_single_article(art, add_title, remove_images, remove_links, export_m
     print(art.id, art.title, art.id)
     
     # 生成文件名
-    name = datetime.fromtimestamp(art.publish_time).strftime("%Y%m%d") + "_" + art.title
+    name = datetime.fromtimestamp(art.publish_time, tz=timezone.utc).strftime("%Y%m%d") + "_" + art.title
     filename = sanitize_filename(name) + ".docx"
     json_filename = sanitize_filename(name) + ".json"
     md_filename = sanitize_filename(name) + ".md"
@@ -88,7 +88,9 @@ def process_single_article(art, add_title, remove_images, remove_links, export_m
                 pdf_full_path = f"{docx_path}{pdf_filename}"
                 from core.config import cfg
                 browser_type = cfg.get("gather.browser_type", "webkit")
-                url_to_pdf(art.url, pdf_full_path, browser_type=browser_type)
+                port=cfg.get("port","8001")
+                url=art.url if art.content =="" else f"http://127.0.0.1:{port}/views/print/{art.id}"
+                url_to_pdf(url, pdf_full_path, browser_type=str(browser_type))
                 
                 # 验证PDF文件是否生成
                 if not os.path.exists(pdf_full_path):
@@ -143,7 +145,7 @@ def process_single_article(art, add_title, remove_images, remove_links, export_m
                 writer.writerow([
                     art.title, 
                     art.url, 
-                    datetime.fromtimestamp(art.publish_time).strftime("%Y-%m-%d %H:%M:%S")
+                    datetime.fromtimestamp(art.publish_time, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
                 ])
                 csv_generated = True
             except Exception as e:
@@ -254,7 +256,7 @@ def export_md_to_doc(mp_id:str=None,doc_id:list=None,page_size:int=10,page_count
     # 打包所有导出的文件为zip并删除源文件
     if record_count > 0:
         if not zip_filename:
-            zip_filename = f"{docx_path}exported_articles_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+            zip_filename = f"{docx_path}exported_articles_{datetime.now(tz=timezone.utc).strftime('%Y%m%d_%H%M%S')}.zip"
         else:
             zip_filename = f"{docx_path}{zip_filename}"
             if not zip_filename.endswith('.zip'):
