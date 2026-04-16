@@ -110,6 +110,66 @@ class WebToPDFConverter:
         self._context = await browser.new_context(**kwargs)
         return self._context
     
+    async def _scroll_page_to_load_images(self, page: Page) -> None:
+        """
+        滚动页面以触发懒加载图片
+        
+        Args:
+            page: Playwright 页面对象
+        """
+        try:
+            logging.info("开始滚动页面以加载图片...")
+            
+            # 获取页面总高度
+            total_height = await page.evaluate("document.body.scrollHeight")
+            viewport_height = await page.evaluate("window.innerHeight")
+            
+            # 如果页面高度小于视口高度，不需要滚动
+            if total_height <= viewport_height:
+                logging.info("页面内容较少，无需滚动")
+                return
+            
+            # 计算滚动次数（每次滚动一个视口高度）
+            scroll_times = int(total_height / viewport_height) + 1
+            scroll_delay = 500  # 每次滚动后等待时间（毫秒）
+            
+            logging.info(f"页面高度: {total_height}px, 视口高度: {viewport_height}px, 需要滚动 {scroll_times} 次")
+            
+            # 逐步滚动页面
+            for i in range(scroll_times):
+                # 滚动到指定位置
+                scroll_position = (i + 1) * viewport_height
+                await page.evaluate(f"window.scrollTo(0, {scroll_position})")
+                
+                # 等待图片加载
+                await page.wait_for_timeout(scroll_delay)
+                
+                # 检查是否有新的图片加载
+                # 等待所有图片开始加载
+                try:
+                    await page.wait_for_function("""
+                        () => {
+                            const images = Array.from(document.images);
+                            return images.every(img => img.complete || img.naturalHeight > 0);
+                        }
+                    """, timeout=5000)
+                except Exception:
+                    # 忽略超时错误，继续滚动
+                    pass
+            
+            # 滚动回顶部
+            await page.evaluate("window.scrollTo(0, 0)")
+            await page.wait_for_timeout(500)
+            
+            # 最后再等待一下，确保所有图片都加载完成
+            await page.wait_for_timeout(1000)
+            
+            logging.info("页面滚动完成，图片加载完毕")
+            
+        except Exception as e:
+            logging.warning(f"滚动页面时出现警告: {e}")
+            # 即使滚动失败，也继续执行
+    
     async def convert_url_to_pdf(
         self,
         url: str,
@@ -160,6 +220,9 @@ class WebToPDFConverter:
                 # 等待特定元素
                 if wait_for_selector:
                     await page.wait_for_selector(wait_for_selector, timeout=self.timeout)
+                
+                # 滚动页面以触发图片加载
+                await self._scroll_page_to_load_images(page)
                 
                 # 额外等待时间
                 if self.wait_time > 0:
@@ -227,6 +290,9 @@ class WebToPDFConverter:
             try:
                 # 设置 HTML 内容
                 await page.set_content(html_content, wait_until="networkidle", timeout=self.timeout)
+                
+                # 滚动页面以触发图片加载
+                await self._scroll_page_to_load_images(page)
                 
                 # 额外等待时间
                 if self.wait_time > 0:
@@ -500,7 +566,10 @@ if __name__ == "__main__":
     
     try:
         print("开始测试 PDF 转换...")
-        success = url_to_pdf("http://62.234.73.131:8001/views/article/3209507364-2247484502_1", "./data/baidu.pdf")
+        pdf_file="./data/test.pdf"
+        success = url_to_pdf("http://192.168.100.58:8001/views/print/FEATURED_ARTICLES-CFyDBjG1qwm3YtyL8kkR7g", pdf_file)
+        from pdf_extractor import pdf_to_docx
+        pdf_to_docx(pdf_file,f"{pdf_file.replace('.pdf','.docx')}")
         if success:
             print("✓ PDF 转换成功！")
         else:
