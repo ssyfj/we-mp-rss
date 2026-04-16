@@ -120,7 +120,7 @@ class WebToPDFConverter:
         pdf_options: Dict[str, Any]
     ) -> None:
         """
-        使用截图方式为 Firefox/WebKit 生成 PDF
+        使用滚动截图方式为 Firefox/WebKit 生成 PDF
         
         Args:
             page: Playwright 页面对象
@@ -131,64 +131,91 @@ class WebToPDFConverter:
             from PIL import Image
             import io
             
-            logging.info(f"使用截图模式生成 PDF (浏览器: {self.browser_type})")
+            logging.info(f"使用滚动截图模式生成 PDF (浏览器: {self.browser_type})")
             
-            # 获取页面尺寸
+            # 获取视口尺寸
             viewport = page.viewport_size
-            page_width = viewport['width'] if viewport else 1280
+            viewport_width = viewport['width'] if viewport else 1280
+            viewport_height = viewport['height'] if viewport else 800
             
-            # 获取页面总高度
+            # 获取页面完整尺寸
+            total_width = await page.evaluate("document.body.scrollWidth")
             total_height = await page.evaluate("document.body.scrollHeight")
             
-            # 设置截图高度（每次截图的最大高度）
-            screenshot_height = 10000  # 每次最多截图 10000px
-            screenshots = []
+            logging.info(f"页面尺寸: {total_width}x{total_height}, 视口尺寸: {viewport_width}x{viewport_height}")
             
-            # 分段截图
+            # 如果页面宽度大于视口宽度，需要调整视口
+            if total_width > viewport_width:
+                await page.set_viewport_size({'width': total_width, 'height': viewport_height})
+                viewport_width = total_width
+                logging.info(f"调整视口宽度为: {viewport_width}")
+            
+            screenshots = []
             current_y = 0
+            
+            # 滚动截图
             while current_y < total_height:
                 # 滚动到指定位置
                 await page.evaluate(f"window.scrollTo(0, {current_y})")
-                await page.wait_for_timeout(500)
+                await page.wait_for_timeout(300)  # 等待滚动完成
                 
-                # 计算本次截图的高度
+                # 计算本次截图的高度（剩余高度或视口高度）
                 remaining_height = total_height - current_y
-                clip_height = min(screenshot_height, remaining_height)
+                screenshot_height = min(viewport_height, remaining_height)
                 
-                # 截图
-                screenshot = await page.screenshot(
-                    clip={
-                        'x': 0,
-                        'y': current_y,
-                        'width': page_width,
-                        'height': clip_height
-                    },
-                    type='png'
-                )
+                logging.debug(f"截图位置: y={current_y}, 高度={screenshot_height}")
+                
+                # 截取当前视口（clip 的 y 坐标是相对于视口的，所以总是从 0 开始）
+                if screenshot_height < viewport_height:
+                    # 最后一次截图，只截取剩余部分
+                    screenshot = await page.screenshot(
+                        clip={
+                            'x': 0,
+                            'y': 0,
+                            'width': viewport_width,
+                            'height': screenshot_height
+                        },
+                        type='png'
+                    )
+                else:
+                    # 截取整个视口
+                    screenshot = await page.screenshot(
+                        clip={
+                            'x': 0,
+                            'y': 0,
+                            'width': viewport_width,
+                            'height': viewport_height
+                        },
+                        type='png'
+                    )
                 
                 # 转换为 PIL Image
                 img = Image.open(io.BytesIO(screenshot))
                 screenshots.append(img)
                 
-                current_y += clip_height
+                # 移动到下一个位置
+                current_y += screenshot_height
+            
+            logging.info(f"共截取 {len(screenshots)} 张图片")
             
             # 合并所有截图
             if screenshots:
                 # 计算总高度
                 total_img_height = sum(img.height for img in screenshots)
                 
-                # 创建新图像
-                merged_img = Image.new('RGB', (page_width, total_img_height), 'white')
+                # 创建新图像（使用白色背景）
+                merged_img = Image.new('RGB', (viewport_width, total_img_height), 'white')
                 
                 # 粘贴所有截图
                 y_offset = 0
-                for img in screenshots:
+                for idx, img in enumerate(screenshots):
                     merged_img.paste(img, (0, y_offset))
                     y_offset += img.height
+                    logging.debug(f"合并图片 {idx + 1}/{len(screenshots)}, 当前偏移: {y_offset}")
                 
                 # 转换为 PDF
                 merged_img.save(output_path, 'PDF', resolution=100.0)
-                logging.info(f"截图 PDF 已生成: {output_path}")
+                logging.info(f"滚动截图 PDF 已生成: {output_path} (总高度: {total_img_height}px)")
             else:
                 raise ValueError("未能生成任何截图")
                 
@@ -198,7 +225,7 @@ class WebToPDFConverter:
                 "请安装: pip install Pillow"
             )
         except Exception as e:
-            logging.error(f"截图生成 PDF 失败: {e}")
+            logging.error(f"滚动截图生成 PDF 失败: {e}")
             raise
     
     async def _scroll_page_to_load_images(self, page: Page) -> None:
@@ -668,9 +695,9 @@ if __name__ == "__main__":
     try:
         print("开始测试 PDF 转换...")
         pdf_file="./data/test.pdf"
-        success = url_to_pdf("http://192.168.100.58:8001/views/print/FEATURED_ARTICLES-CFyDBjG1qwm3YtyL8kkR7g", pdf_file)
+        success = url_to_pdf("http://192.168.100.58:8001/views/print/FEATURED_ARTICLES-CFyDBjG1qwm3YtyL8kkR7g", pdf_file,browser_type="webkit")
         from pdf_extractor import pdf_to_docx
-        pdf_to_docx(pdf_file,f"{pdf_file.replace('.pdf','.docx')}",browser_type="webkit")
+        pdf_to_docx(pdf_file,f"{pdf_file.replace('.pdf','.docx')}")
         if success:
             print("✓ PDF 转换成功！")
         else:
