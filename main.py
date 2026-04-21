@@ -1,5 +1,9 @@
 import sys
 import asyncio
+from dotenv import load_dotenv
+load_dotenv(override=True)
+
+
 
 # Windows 需要使用 ProactorEventLoop 以支持 Playwright 子进程
 if sys.platform == 'win32':

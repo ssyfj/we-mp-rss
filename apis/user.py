@@ -5,6 +5,7 @@ from core.db import DB
 from core.models import User as DBUser
 from core.auth import pwd_context
 import os
+from uuid import uuid4
 from .base import success_response, error_response
 router = APIRouter(prefix="/user", tags=["用户管理"])
 
@@ -143,6 +144,7 @@ async def add_user(
 
         # 创建新用户
         new_user = DBUser(
+            id=str(uuid4()),
             username=user_data["username"],
             password_hash=pwd_context.hash(user_data["password"]),
             email=user_data["email"],

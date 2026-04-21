@@ -10,16 +10,21 @@ from core.db import Db,DB
 from core.config import cfg
 from core.auth import pwd_context
 import time
+from datetime import datetime
 import os
+from uuid import uuid4
 from core.print import print_info, print_error
 def init_user(_db: Db):
     try:
       username,password=os.getenv("USERNAME", "admin"),os.getenv("PASSWORD", "admin@123")
       session=_db.get_session()
       session.add(User(
-          id=0,
+          id=str(uuid4()),
           username=username,
           password_hash=pwd_context.hash(password),
+          role="admin",
+          created_at=datetime.now(),
+          updated_at=datetime.now()
           ))
       session.commit()
       print_info(f"初始化用户成功,请使用以下凭据登录：{username}")

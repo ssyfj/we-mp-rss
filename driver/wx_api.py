@@ -40,7 +40,8 @@ class WeChatAPI:
         # 状态管理
         self._islogin=False
         self.is_logged_in = False
-        self.fingerprint = self._generate_uuid()
+        self.fingerprint: str = self._generate_uuid()
+        self.uuid: str = self._generate_uuid()
         self.session = requests.Session()
         self.token = None
         self.cookies_dict=[]
@@ -198,19 +199,18 @@ class WeChatAPI:
             session.headers.update(browser_headers)
             
             # 启动登录流程获取UUID
-            uuid = self.start_login()
-            if not uuid:
-                uuid = self._generate_uuid()
+            self.uuid = self.start_login()
+            
             
             # 构建二维码请求URL，模拟浏览器请求
             timestamp = int(time.time() * 1000)  # 使用毫秒时间戳
-            qr_api_url = f"{self.base_url}/cgi-bin/scanloginqrcode?action=getqrcode&uuid={uuid}&random={timestamp}"
+            qr_api_url = f"{self.base_url}/cgi-bin/scanloginqrcode?action=getqrcode&uuid={self.uuid}&random={timestamp}"
             
 
           
             
             logger.info(f"请求二维码: {qr_api_url}")
-            logger.info(f"使用UUID: {uuid}")
+            logger.info(f"使用UUID: {self.uuid}")
             # 发送请求获取二维码
             response = session.get(qr_api_url,  allow_redirects=False)
             
@@ -233,7 +233,7 @@ class WeChatAPI:
                         
                         return {
                             'qr_url': f"{qr_api_url}?",
-                            'uuid': uuid
+                            'uuid': self.uuid
                         }
                         
                     except Exception as e:
@@ -272,13 +272,11 @@ class WeChatAPI:
         """
         启动登录流程
         """
-        uuid=self._generate_uuid()
-        self.session.cookies.set("uuid",uuid)
+        self.session.cookies.set("uuid",self.uuid)
         token=self.session.cookies.get("token","")
         url=f"{self.base_url}/cgi-bin/bizlogin?action=startlogin"
-        fingerprint=self._generate_uuid()
         data={
-            "fingerprint": fingerprint,
+            "fingerprint": self.fingerprint,
             "token": token,
             "lang": "zh_CN",
             "f": "json",
@@ -288,19 +286,20 @@ class WeChatAPI:
         }
         response=self.session.post(url,data=data)
           # 从响应头或Cookie中获取UUID
-        uuid = response.cookies.get('uuid') or response.headers.get('X-UUID') 
-        return uuid
+        self.uuid = response.cookies.get('uuid') or response.headers.get('X-UUID') 
+        return self.uuid
     
     def pre_login(self):
         """
         启动登录流程
         """
-        uuid=self._generate_uuid()
+        uuid=self.uuid
         self.session.cookies.set("uuid",uuid)
         url=f"{self.base_url}/cgi-bin/bizlogin"
+        self.fingerprint=self.cookies.get("fingerprint") or self.fingerprint
         params={
             "action": "prelogin",
-            "fingerprint": self._generate_uuid(),
+            "fingerprint": self.fingerprint,
             "token": "",
             "lang": "zh_CN",
             "f": "json",
@@ -425,7 +424,7 @@ class WeChatAPI:
             if not os.path.exists(self.qr_code_path):
                 return "not_exists"
             check_url=f"{self.base_url}/cgi-bin/scanloginqrcode"
-            self.fingerprint=self.cookies.get("fingerprint") or self._generate_uuid()
+            self.fingerprint=self.cookies.get("fingerprint") or self.fingerprint
             params = {
                 "action": "ask",
                 "fingerprint": self.fingerprint,
@@ -489,7 +488,7 @@ class WeChatAPI:
             # 访问首页获取token
             # https://mp.weixin.qq.com/cgi-bin/loginpage?url=%2Fcgi-bin%2Fhome
             # https://mp.weixin.qq.com/cgi-bin/bizlogin?action=login
-            
+            self.fingerprint=self.cookies.get("fingerprint") or self.fingerprint
             # 执行登录POST请求
             login_data = {
                 "userlang": "zh_CN",
@@ -652,6 +651,7 @@ class WeChatAPI:
             # 将 requests cookies 转换为列表格式（兼容 Store.save）
             cookies_list = self._convert_cookies_to_list()
             # 将cookie转换为字典
+            self.fingerprint=self.cookies.get("fingerprint") or self.fingerprint
             login_data = {
                             'cookies': self.cookies,
                             'cookies_str': self._format_cookies_string(),
@@ -702,7 +702,7 @@ class WeChatAPI:
                 
             # 构建请求URL
             url = f"{self.base_url}/cgi-bin/switchacct"
-            self.fingerprint=self.cookies.get("fingerprint") or self._generate_uuid()
+            self.fingerprint=self.cookies.get("fingerprint") or self.fingerprint
             # 设置请求参数
             params = {
                 'action': 'get_acct_list',

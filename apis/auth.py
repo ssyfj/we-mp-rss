@@ -26,8 +26,6 @@ from typing import Optional
 
 router = APIRouter(prefix=f"/auth", tags=["认证"])
 from driver.success import Success
-from driver.wx_api import get_qr_code #通过API登录
-from driver.wx import WX_API
 def ApiSuccess(data):
     if data != None:
             print("\n登录结果:")
